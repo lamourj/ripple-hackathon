@@ -18,11 +18,13 @@ from anthropic import Anthropic
 from anthropic.lib import files_from_dir
 
 
-# Map skill directory name → specialist key that should get it
+# Map skill directory name → specialist key that should get it.
+# Keys match .specialist_ids.json / the events.json contract in TEAM_SPLIT.md.
 SKILL_TO_SPECIALIST = {
-    "pricing-playbook": "pricing",
-    "legal-checklist":  "legal",
-    "competitive-intel": "competitive",
+    "budget-sponsor-playbook":  "budget",
+    "end-user-playbook":        "enduser",
+    "it-data-owner-playbook":   "itdata",
+    "risk-compliance-playbook": "risk",
 }
 
 

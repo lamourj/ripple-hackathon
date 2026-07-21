@@ -1,5 +1,8 @@
-# Generated deliverables and live event stream
-outputs/
+# Generated deliverables and live event stream — but keep the frontend SOURCE.
+outputs/*
+!outputs/frontend/
+outputs/frontend/*
+!outputs/frontend/index.html
 
 # Managed Agents session/agent/skill state (per-machine, created at runtime)
 .coordinator_id
