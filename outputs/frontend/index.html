@@ -140,7 +140,11 @@
   <div class="body">
     <div class="feed-col">
       <div class="col-head">Live stakeholder negotiation <span class="n" id="feedCount"></span></div>
-      <div class="feed" id="feed"><div class="placeholder">Waiting for the swarm to convene…</div></div>
+      <div class="feed" id="feed">
+        <div class="placeholder" id="feedPlaceholder">Waiting for the swarm to convene…</div>
+        <div id="feedMsgs"></div>
+        <div id="feedTyping"></div>
+      </div>
     </div>
     <div class="map-col">
       <div class="col-head">Ripple map <span class="n" id="mapCount"></span></div>
@@ -196,23 +200,33 @@ function esc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,
 function av(sp){ return `<div class="avatar" style="background:${sp.col}">${sp.ini}</div>`; }
 
 let focusId = null;
+// What is currently in the DOM. We only touch the DOM when one of these strings
+// changes — so a tick with nothing new is a no-op and nothing re-animates/flashes.
+const RENDERED = { pitch:"", live:"", resistance:"", map:"", typing:"", feedN:0, focus:undefined, counts:"" };
 
-// ---- render ----
+function scrollFeed(){ if(window._stick!==false){ const f=document.getElementById("feed"); f.scrollTop=f.scrollHeight; } }
+
+// ---- render: idempotent + append-only. Rebuilds a region ONLY when its content changed ----
 function render(revealed, full) {
-  const s = fold(revealed);
-  const sFull = fold(full);
+  const s = fold(revealed), sFull = fold(full);
 
-  // header
-  document.getElementById("pitch").innerHTML = s.initiative
+  // header (guarded — no animation, but skip churn)
+  const pitch = s.initiative
     ? `Forecasting internal resistance to: <b>${esc(s.initiative)}</b>` +
       (s.sector && s.sector!=="(not specified)" ? ` &nbsp;·&nbsp; ${esc(s.sector)}` : "") +
       (s.orgSize && s.orgSize!=="(not specified)" ? ` &nbsp;·&nbsp; ${esc(s.orgSize)}` : "")
     : "Before you pitch an AI initiative internally, see <b>who will push back and why</b>.";
-  document.getElementById("liveText").textContent =
-    s.finished && revealed.length===full.length ? "verdict ready ✓" : "negotiation live…";
+  if (pitch !== RENDERED.pitch) { document.getElementById("pitch").innerHTML = pitch; RENDERED.pitch = pitch; }
 
-  // resistance strip
-  document.getElementById("resistance").innerHTML = SPECS.map(sp => {
+  const stanceEvents = revealed.filter(e => e.type==="stance_received");
+  const totalStances = full.filter(e => e.type==="stance_received").length;
+  const done = s.finished && revealed.length===full.length;
+  const compiling = !done && revealed.length===full.length && stanceEvents.length>0 && stanceEvents.length===totalStances;
+  const live = done ? "verdict ready ✓" : (compiling ? "compiling report…" : "negotiation live…");
+  if (live !== RENDERED.live) { document.getElementById("liveText").textContent = live; RENDERED.live = live; }
+
+  // resistance strip (rebuild only on change → keeps 'thinking' pulse steady)
+  const rHtml = SPECS.map(sp => {
     const p = posture(s.stances[sp.key]);
     const thinking = !p && s.called[sp.key] && s.called[sp.key].size;
     const cls = p ? p : (thinking ? "thinking" : "idle");
@@ -221,60 +235,69 @@ function render(revealed, full) {
       <div><div class="who">${sp.name}</div><div class="role">${sp.role}</div></div>
       <div class="posture ${cls}">${txt}</div></div>`;
   }).join("");
+  if (rHtml !== RENDERED.resistance) { document.getElementById("resistance").innerHTML = rHtml; RENDERED.resistance = rHtml; }
 
-  renderFeed(s, sFull);
-  renderMap(s);
+  // feed: APPEND new bubbles only — existing ones are never re-created, so they never re-animate
+  const msgs = document.getElementById("feedMsgs");
+  if (stanceEvents.length < RENDERED.feedN) { msgs.innerHTML = ""; RENDERED.feedN = 0; }  // fresh run reset
+  for (let i = RENDERED.feedN; i < stanceEvents.length; i++)
+    msgs.insertAdjacentHTML("beforeend", bubbleHtml(stanceEvents[i], s, sFull));
+  if (stanceEvents.length !== RENDERED.feedN) { RENDERED.feedN = stanceEvents.length; scrollFeed(); }
+
+  // focus highlight: toggle classes on existing bubbles (no rebuild)
+  if (focusId !== RENDERED.focus) {
+    document.querySelectorAll("#feedMsgs .msg").forEach(m => {
+      m.classList.toggle("hot", !!focusId && m.dataset.node===focusId);
+      m.classList.toggle("dim", !!focusId && m.dataset.node!==focusId);
+    });
+    RENDERED.focus = focusId;
+    if (focusId) { const f=document.querySelector("#feedMsgs .msg.hot"); if(f) f.scrollIntoView({block:"center",behavior:"smooth"}); }
+  }
+
+  // typing indicators (rebuild only on change)
+  const rev={}, tot={};
+  revealed.forEach(e=>{ if(e.type==="stance_received") rev[e.specialist]=(rev[e.specialist]||0)+1; });
+  full.forEach(e=>{ if(e.type==="stance_received") tot[e.specialist]=(tot[e.specialist]||0)+1; });
+  const tHtml = SPECS.filter(sp => (s.called[sp.key]&&s.called[sp.key].size) && (tot[sp.key]||0)>(rev[sp.key]||0))
+    .map(sp => `<div class="typing">${av(sp)}
+      <div class="bubble"><b style="color:var(--ink);font-weight:600">${sp.name}</b> is weighing in
+      <span class="d"></span><span class="d"></span><span class="d"></span></div></div>`).join("");
+  if (tHtml !== RENDERED.typing) { document.getElementById("feedTyping").innerHTML = tHtml; RENDERED.typing = tHtml; scrollFeed(); }
+
+  // placeholder + count
+  document.getElementById("feedPlaceholder").style.display = (stanceEvents.length || tHtml) ? "none" : "block";
+  const counts = stanceEvents.length ? `${stanceEvents.length} reactions` : "";
+  if (counts !== RENDERED.counts) { document.getElementById("feedCount").textContent = counts; RENDERED.counts = counts; }
+
+  // map (rebuild only on change → keeps 'pending' pulse steady)
+  const mHtml = mapHtml(s);
+  if (mHtml !== RENDERED.map) {
+    const map = document.getElementById("map");
+    map.innerHTML = mHtml;
+    document.getElementById("mapCount").textContent = s.order.length ? `${s.order.length} effects` : "";
+    map.querySelectorAll(".erow").forEach(r => r.onclick = () => {
+      focusId = (focusId === r.dataset.id) ? null : r.dataset.id;
+      window._stick = false; render(window._revealed, window._full);
+    });
+    RENDERED.map = mHtml;
+  }
 }
 
-function renderFeed(s, sFull) {
-  const feed = document.getElementById("feed");
-  const bubbles = [];
-  // conversation in revealed order
-  for (const e of window._revealed) {
-    if (e.type !== "stance_received") continue;
-    const sp = BY[e.specialist]; const node = s.nodes[e.node_id] || sFull.nodes[e.node_id] || {};
-    const hot = focusId && e.node_id === focusId;
-    const dim = focusId && e.node_id !== focusId;
-    bubbles.push(`<div class="msg ${hot?'hot':''} ${dim?'dim':''}">
+function bubbleHtml(e, s, sFull) {
+  const sp = BY[e.specialist];
+  const node = s.nodes[e.node_id] || sFull.nodes[e.node_id] || {};
+  const hot = focusId && e.node_id===focusId, dim = focusId && e.node_id!==focusId;
+  return `<div class="msg ${hot?'hot':''} ${dim?'dim':''}" data-node="${e.node_id}">
       <div class="av">${av(sp)}</div>
       <div class="bubble">
         <div class="top"><span class="nm">${sp.name}</span>
           <span class="stance ${e.stance}">${e.stance}</span>
           <span class="re">re: <b>${esc(node.label||e.node_id)}</b></span></div>
         <div class="say">“${esc(e.reaction)}”</div>
-      </div></div>`);
-  }
-  // typing indicators: called specialists who still have unrevealed stances coming
-  const revealedCountBySpec = {};
-  window._revealed.forEach(e => { if(e.type==="stance_received") revealedCountBySpec[e.specialist]=(revealedCountBySpec[e.specialist]||0)+1; });
-  const totalBySpec = {};
-  window._full.forEach(e => { if(e.type==="stance_received") totalBySpec[e.specialist]=(totalBySpec[e.specialist]||0)+1; });
-  for (const sp of SPECS) {
-    const called = s.called[sp.key] && s.called[sp.key].size;
-    const more = (totalBySpec[sp.key]||0) > (revealedCountBySpec[sp.key]||0);
-    if (called && more) bubbles.push(`<div class="typing">${av(sp)}
-      <div class="bubble"><b style="color:var(--ink);font-weight:600">${sp.name}</b> is weighing in
-      <span class="d"></span><span class="d"></span><span class="d"></span></div></div>`);
-  }
-
-  feed.innerHTML = bubbles.length ? bubbles.join("")
-    : `<div class="placeholder">Waiting for the swarm to convene…</div>`;
-  document.getElementById("feedCount").textContent =
-    bubbles.filter(b=>b.includes("class=\"bubble\"")).length ? `${window._revealed.filter(e=>e.type==="stance_received").length} reactions` : "";
-
-  // autoscroll if near bottom
-  if (window._stick !== false) feed.scrollTop = feed.scrollHeight;
+      </div></div>`;
 }
-// keep autoscroll only when user is at the bottom
-document.addEventListener("DOMContentLoaded", () => {
-  const feed = document.getElementById("feed");
-  feed.addEventListener("scroll", () => {
-    window._stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
-  });
-});
 
-function renderMap(s) {
-  const map = document.getElementById("map");
+function mapHtml(s) {
   let html = "";
   if (s.initiative) html += `<div class="rootrow"><div class="stat" style="background:var(--budget)"></div>
     <div><div class="cap">Initiative</div><div class="lbl">${esc(s.initiative)}</div></div></div>`;
@@ -283,13 +306,7 @@ function renderMap(s) {
     html += rowHtml(d);
     s.order.map(id=>s.nodes[id]).filter(n=>n.parent_id===d.id).forEach(c => html += rowHtml(c));
   }
-  map.innerHTML = html || `<div class="placeholder" style="padding:20px 4px">Mapping ripple effects…</div>`;
-  document.getElementById("mapCount").textContent = s.order.length ? `${s.order.length} effects` : "";
-  map.querySelectorAll(".erow").forEach(r => r.onclick = () => {
-    focusId = (focusId === r.dataset.id) ? null : r.dataset.id;
-    window._stick = false; render(window._revealed, window._full);
-    if (focusId) { const first=document.querySelector(".msg.hot"); if(first) first.scrollIntoView({block:"center",behavior:"smooth"}); }
-  });
+  return html || `<div class="placeholder" style="padding:20px 4px">Mapping ripple effects…</div>`;
 }
 function rowHtml(n) {
   const st = status(n);
@@ -301,6 +318,14 @@ function rowHtml(n) {
     <span class="owners">${owners}</span></div>`;
 }
 
+// keep autoscroll only when user is at the bottom
+document.addEventListener("DOMContentLoaded", () => {
+  const feed = document.getElementById("feed");
+  feed.addEventListener("scroll", () => {
+    window._stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+  });
+});
+
 // ---- polling + conversational paced reveal ----
 window._revealed = []; window._full = []; window._stick = true;
 let cursor = 0, prevLen = 0;
@@ -310,12 +335,12 @@ async function poll() {
     const res = await fetch(`events.json?t=${Date.now()}`, { cache:"no-store" });
     if (!res.ok) throw new Error(res.status);
     const events = await res.json();
-    if (events.length < prevLen) { cursor = 0; }   // a fresh run reset the file → replay
+    if (events.length < prevLen) { cursor = 0; RENDERED.feedN = 0; }  // fresh run reset → replay
     prevLen = events.length;
     window._full = events;
     document.getElementById("dot").style.background = "var(--adopt)";
   } catch(e) {
-    document.getElementById("liveText").textContent = "waiting for events.json…";
+    if (RENDERED.live !== "waiting…") { document.getElementById("liveText").textContent = "waiting for events.json…"; RENDERED.live = "waiting…"; }
     document.getElementById("dot").style.background = "var(--circumvent)";
   }
 }
@@ -334,7 +359,7 @@ function tick() {
 }
 
 poll(); setInterval(poll, 1000);
-setInterval(tick, 850);
+setInterval(tick, 550);
 </script>
 </body>
 </html>
