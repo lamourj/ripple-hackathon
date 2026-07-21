@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <!--
-  Ripple — Change Impact Desk · live frontend
+  Ripple — Change Impact Desk · live frontend ("situation room")
   ================================================================
   Serve this directory (it also holds the live events.json) with:
 
       python -m http.server 8000 --directory outputs/frontend
 
-  Then open http://localhost:8000 . The page polls events.json once a
-  second and REVEALS the stakeholder negotiation at a conversational pace,
-  so it feels live whether the swarm is still running or you're replaying a
-  finished run. Contract/schema: see TEAM_SPLIT.md. No build step, no framework.
+  Then open http://localhost:8000 . The page polls events.json once a second
+  and plays the stakeholder negotiation as a little simulation: four characters
+  take the floor one at a time, react in their own voice, and the ripple map +
+  transcript fill in beneath. Feels live whether the swarm is still running or
+  you're replaying a finished run. Contract/schema: see TEAM_SPLIT.md.
 -->
 <html lang="en">
 <head>
@@ -25,29 +26,57 @@
   }
   * { box-sizing:border-box; }
   html,body { height:100%; }
-  body { margin:0; background:var(--bg); color:var(--ink);
+  body { margin:0; background:var(--bg); color:var(--ink); overflow:hidden;
     font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
 
   /* ---------- header ---------- */
-  header { padding:14px 24px 12px; border-bottom:1px solid var(--line); }
+  header { padding:13px 24px 11px; border-bottom:1px solid var(--line); }
   .brandline { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
   header h1 { font-size:16px; margin:0; letter-spacing:.2px; }
   .live { margin-left:auto; font-size:12px; color:var(--dim); display:flex; align-items:center; gap:7px; }
   .live .dot { width:8px;height:8px;border-radius:50%;background:var(--adopt);animation:pulse 1.4s infinite; }
-  .pitch { color:var(--dim); font-size:13px; margin-top:5px; max-width:900px; }
+  .pitch { color:var(--dim); font-size:13px; margin-top:4px; max-width:960px; }
   .pitch b { color:var(--ink); font-weight:600; }
 
-  /* ---------- resistance strip ---------- */
-  .resistance { display:flex; gap:10px; padding:12px 24px; border-bottom:1px solid var(--line);
-    background:var(--panel); overflow-x:auto; }
-  .rcard { flex:1 1 0; min-width:180px; background:var(--panel2); border:1px solid var(--line);
-    border-radius:10px; padding:9px 12px; display:flex; gap:10px; align-items:center; }
-  .avatar { width:30px;height:30px;border-radius:8px; flex:0 0 auto; display:grid; place-items:center;
-    font-size:11px; font-weight:700; color:#0d1017; }
-  .rcard .who { font-size:12.5px; font-weight:600; line-height:1.2; }
-  .rcard .role { font-size:10.5px; color:var(--faint); }
-  .posture { margin-left:auto; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
-    white-space:nowrap; border:1px solid transparent; }
+  .layout { height:calc(100vh - 58px); display:flex; flex-direction:column; }
+
+  /* ---------- the stage (hero simulation) ---------- */
+  .stage { padding:14px 24px 18px; border-bottom:1px solid var(--line);
+    background:radial-gradient(120% 90% at 50% 0%, #141b27 0%, var(--bg) 70%); }
+  .topic { text-align:center; font-size:12.5px; color:var(--dim); margin-bottom:6px; letter-spacing:.2px; }
+  .topic b { color:var(--ink); }
+
+  .bubblebar { min-height:118px; display:flex; align-items:flex-end; justify-content:center; }
+  .hint { color:var(--faint); font-size:13px; padding-bottom:22px; font-style:italic; }
+  .speech { position:relative; max-width:620px; background:var(--panel2); border:1.6px solid var(--line);
+    border-radius:16px; padding:12px 18px; animation:pop .32s cubic-bezier(.2,1.3,.5,1) both;
+    box-shadow:0 8px 30px -12px #000; }
+  .speech::after { content:""; position:absolute; top:100%; left:var(--tail,50%); transform:translateX(-50%);
+    border:10px solid transparent; border-top-color:var(--panel2); }
+  .speech::before { content:""; position:absolute; top:100%; left:var(--tail,50%); transform:translateX(-50%);
+    margin-top:1.6px; border:10px solid transparent; border-top-color:var(--bstroke,var(--line)); z-index:-1; }
+  .speech.adopt{ --bstroke:var(--adopt); border-color:var(--adopt); }
+  .speech.block{ --bstroke:var(--block); border-color:var(--block); }
+  .speech.circumvent{ --bstroke:var(--circumvent); border-color:var(--circumvent); }
+  .speech.escalate{ --bstroke:var(--escalate); border-color:var(--escalate); }
+  .sp-top { display:flex; align-items:center; gap:9px; margin-bottom:5px; flex-wrap:wrap; }
+  .sp-top b { font-size:13px; }
+  .sp-re { margin-left:auto; font-size:11px; color:var(--faint); }
+  .sp-say { font-size:16px; line-height:1.5; }
+
+  .cast { display:flex; gap:14px; margin-top:16px; max-width:900px; margin-left:auto; margin-right:auto; }
+  .char { flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center;
+    opacity:.52; transform:translateY(0); transition:opacity .35s, transform .35s; }
+  .char.speaking { opacity:1; transform:translateY(-5px); }
+  .face { width:62px; height:62px; border-radius:50%; display:grid; place-items:center; font-size:29px;
+    background:var(--panel2); border:2.5px solid var(--line); transition:box-shadow .35s, border-color .35s, transform .35s; }
+  .char.speaking .face { transform:scale(1.08); }
+  .face.spk-adopt{ border-color:var(--adopt); box-shadow:0 0 20px -3px var(--adopt); }
+  .face.spk-block{ border-color:var(--block); box-shadow:0 0 20px -3px var(--block); }
+  .face.spk-circumvent{ border-color:var(--circumvent); box-shadow:0 0 20px -3px var(--circumvent); }
+  .face.spk-escalate{ border-color:var(--escalate); box-shadow:0 0 20px -3px var(--escalate); }
+  .cname { font-size:12px; font-weight:600; line-height:1.15; }
+  .posture { font-size:10.5px; font-weight:600; padding:2px 9px; border-radius:999px; border:1px solid transparent; }
   .posture.idle { color:var(--faint); border-color:var(--line); }
   .posture.thinking { color:var(--budget); border-color:var(--budget); animation:pulse 1.1s infinite; }
   .posture.adopt { color:var(--adopt); border-color:var(--adopt); background:#122c1a; }
@@ -55,72 +84,53 @@
   .posture.circumvent { color:var(--circumvent); border-color:var(--circumvent); background:#302611; }
   .posture.escalate { color:var(--escalate); border-color:var(--escalate); background:#251b38; }
 
-  /* ---------- body ---------- */
-  .body { display:grid; grid-template-columns:1.5fr 1fr; height:calc(100vh - 168px); }
-  .feed-col { display:flex; flex-direction:column; border-right:1px solid var(--line); min-height:0; }
-  .col-head { padding:12px 20px 8px; font-size:11px; text-transform:uppercase; letter-spacing:1.2px;
-    color:var(--dim); display:flex; align-items:center; gap:8px; }
+  /* ---------- lower: transcript + ripple map ---------- */
+  .lower { flex:1; display:grid; grid-template-columns:1.25fr 1fr; min-height:0; }
+  .tcol, .map-col { display:flex; flex-direction:column; min-height:0; }
+  .tcol { border-right:1px solid var(--line); }
+  .col-head { padding:11px 20px 7px; font-size:11px; text-transform:uppercase; letter-spacing:1.2px;
+    color:var(--dim); display:flex; gap:8px; }
   .col-head .n { color:var(--faint); text-transform:none; letter-spacing:0; }
-  .feed { flex:1; overflow-y:auto; padding:6px 20px 24px; min-height:0; }
+  .feed { flex:1; overflow-y:auto; padding:2px 20px 20px; min-height:0; }
+  .placeholder { color:var(--faint); font-size:13px; padding:24px 4px; }
 
-  /* chat bubble */
-  .msg { display:flex; gap:11px; margin:14px 0; animation:rise .32s ease both; }
-  .msg .av { position:relative; }
-  .bubble { background:var(--panel2); border:1px solid var(--line); border-radius:4px 12px 12px 12px;
-    padding:9px 13px; flex:1; }
-  .bubble .top { display:flex; align-items:center; gap:9px; margin-bottom:5px; flex-wrap:wrap; }
-  .bubble .nm { font-weight:600; font-size:13px; }
-  .stance { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
-    padding:2px 8px; border-radius:999px; }
+  .msg { display:flex; gap:10px; margin:11px 0; animation:rise .3s ease both; }
+  .bubble { background:var(--panel2); border:1px solid var(--line); border-radius:4px 11px 11px 11px;
+    padding:7px 11px; flex:1; }
+  .bubble .top { display:flex; align-items:center; gap:8px; margin-bottom:3px; flex-wrap:wrap; }
+  .bubble .nm { font-weight:600; font-size:12.5px; }
+  .stance { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; padding:2px 8px; border-radius:999px; }
   .stance.adopt { color:var(--adopt); background:#122c1a; }
   .stance.block { color:var(--block); background:#331518; }
   .stance.circumvent { color:var(--circumvent); background:#302611; }
   .stance.escalate { color:var(--escalate); background:#251b38; }
-  .re { margin-left:auto; font-size:11px; color:var(--faint); }
+  .re { margin-left:auto; font-size:10.5px; color:var(--faint); }
   .re b { color:var(--dim); font-weight:600; }
-  .bubble .say { font-size:14px; line-height:1.5; }
-  .msg.dim { opacity:.28; }
-  .msg.hot .bubble { border-color:var(--budget); box-shadow:0 0 0 1px var(--budget); }
+  .bubble .say { font-size:13px; line-height:1.45; }
+  .msg.dim { opacity:.3; } .msg.hot .bubble { border-color:var(--budget); box-shadow:0 0 0 1px var(--budget); }
 
-  /* typing */
-  .typing { display:flex; gap:11px; margin:14px 0; align-items:center; }
-  .typing .bubble { display:inline-flex; align-items:center; gap:8px; flex:0 0 auto; color:var(--dim);
-    font-size:12.5px; border-style:dashed; }
-  .typing .d { width:6px;height:6px;border-radius:50%;background:var(--dim); animation:blink 1s infinite; }
-  .typing .d:nth-child(2){animation-delay:.2s} .typing .d:nth-child(3){animation-delay:.4s}
-
-  .feed .placeholder { color:var(--faint); font-size:13px; padding:30px 4px; }
-
-  /* ---------- map ---------- */
-  .map-col { display:flex; flex-direction:column; min-height:0; }
-  .map { flex:1; overflow-y:auto; padding:2px 18px 20px; min-height:0; }
-  .rootrow { display:flex; gap:9px; align-items:flex-start; padding:9px 10px; margin-bottom:4px;
+  .map { flex:1; overflow-y:auto; padding:2px 18px 16px; min-height:0; }
+  .rootrow { display:flex; gap:9px; align-items:flex-start; padding:8px 10px; margin-bottom:4px;
     background:#10233b; border:1px solid var(--budget); border-radius:9px; }
-  .rootrow .lbl { font-weight:600; font-size:13px; }
+  .rootrow .lbl { font-weight:600; font-size:12.5px; }
   .rootrow .cap { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
-  .erow { display:flex; gap:9px; align-items:center; padding:7px 10px; border-radius:8px; cursor:pointer;
-    border:1px solid transparent; transition:background .15s,border-color .15s; }
-  .erow:hover { background:var(--panel2); }
-  .erow.sel { border-color:var(--budget); background:var(--panel2); }
-  .erow.depth2 { margin-left:26px; }
-  .erow.preempted { opacity:.4; }
-  .erow.preempted .lbl { text-decoration:line-through; }
+  .erow { display:flex; gap:9px; align-items:center; padding:6px 10px; border-radius:8px; cursor:pointer;
+    border:1px solid transparent; }
+  .erow:hover { background:var(--panel2); } .erow.sel { border-color:var(--budget); background:var(--panel2); }
+  .erow.depth2 { margin-left:24px; } .erow.preempted { opacity:.4; } .erow.preempted .lbl { text-decoration:line-through; }
   .stat { width:9px;height:9px;border-radius:50%; flex:0 0 auto; }
   .stat.propagates{background:var(--adopt)} .stat.blocked{background:var(--block)}
   .stat.pending{background:var(--circumvent);animation:pulse 1.1s infinite} .stat.preempted{background:var(--faint)}
-  .erow .lbl { font-size:13px; flex:1; }
-  .erow .tag { font-size:9.5px; text-transform:uppercase; letter-spacing:.4px; padding:1px 6px;
-    border-radius:4px; color:var(--dim); }
+  .erow .lbl { font-size:12.5px; flex:1; }
+  .erow .tag { font-size:9.5px; text-transform:uppercase; letter-spacing:.4px; padding:1px 6px; border-radius:4px; color:var(--dim); }
   .erow .tag.positive{color:var(--adopt)} .erow .tag.negative{color:var(--circumvent)} .erow .tag.perverse{color:var(--block)}
-  .erow .owners { display:flex; gap:3px; }
-  .odot { width:9px;height:9px;border-radius:3px; }
-  .legend { padding:11px 18px; border-top:1px solid var(--line); font-size:11px; color:var(--dim);
-    display:flex; gap:16px; flex-wrap:wrap; }
+  .erow .owners { display:flex; gap:3px; } .odot { width:9px;height:9px;border-radius:3px; }
+  .legend { padding:9px 18px; border-top:1px solid var(--line); font-size:11px; color:var(--dim); display:flex; gap:15px; flex-wrap:wrap; }
   .legend span{display:inline-flex;align-items:center;gap:6px} .legend i{width:9px;height:9px;border-radius:50%}
 
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-  @keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
-  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.94)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -130,49 +140,51 @@
       <div class="live"><span class="dot" id="dot"></span><span id="liveText">connecting…</span></div>
     </div>
     <div class="pitch" id="pitch">
-      Before you pitch an AI initiative internally, see <b>who will push back and why</b> —
-      so you walk into the room with every objection already answered.
+      Before you pitch an AI initiative internally, watch <b>who pushes back and why</b> —
+      the four stakeholders you'll have to win over, in the room.
     </div>
   </header>
 
-  <div class="resistance" id="resistance"></div>
-
-  <div class="body">
-    <div class="feed-col">
-      <div class="col-head">Live stakeholder negotiation <span class="n" id="feedCount"></span></div>
-      <div class="feed" id="feed">
-        <div class="placeholder" id="feedPlaceholder">Waiting for the swarm to convene…</div>
-        <div id="feedMsgs"></div>
-        <div id="feedTyping"></div>
-      </div>
+  <div class="layout">
+    <div class="stage">
+      <div class="topic" id="topic">🎙 The change-impact room</div>
+      <div class="bubblebar" id="bubblebar"></div>
+      <div class="cast" id="cast"></div>
     </div>
-    <div class="map-col">
-      <div class="col-head">Ripple map <span class="n" id="mapCount"></span></div>
-      <div class="map" id="map"></div>
-      <div class="legend">
-        <span><i style="background:var(--adopt)"></i>propagates</span>
-        <span><i style="background:var(--block)"></i>blocked</span>
-        <span><i style="background:var(--circumvent)"></i>awaiting</span>
-        <span><i style="background:var(--faint)"></i>pre-empted</span>
+    <div class="lower">
+      <div class="tcol">
+        <div class="col-head">Transcript <span class="n" id="feedCount"></span></div>
+        <div class="feed" id="feed">
+          <div class="placeholder" id="feedPlaceholder">Waiting for the swarm to convene…</div>
+          <div id="feedMsgs"></div>
+        </div>
+      </div>
+      <div class="map-col">
+        <div class="col-head">Ripple map <span class="n" id="mapCount"></span></div>
+        <div class="map" id="map"></div>
+        <div class="legend">
+          <span><i style="background:var(--adopt)"></i>propagates</span>
+          <span><i style="background:var(--block)"></i>blocked</span>
+          <span><i style="background:var(--circumvent)"></i>awaiting</span>
+          <span><i style="background:var(--faint)"></i>pre-empted</span>
+        </div>
       </div>
     </div>
   </div>
 
 <script>
 const SPECS = [
-  { key:"budget",  name:"Budget Sponsor",       role:"cost · ROI · hidden costs",       ini:"BS", col:"var(--budget)" },
-  { key:"enduser", name:"Operational End-User", role:"workload · friction · trust",     ini:"EU", col:"var(--enduser)" },
-  { key:"itdata",  name:"IT / Data Owner",      role:"data · integration · tech debt",  ini:"IT", col:"var(--itdata)" },
-  { key:"risk",    name:"Risk & Compliance",    role:"regulatory · governance · rep",   ini:"RC", col:"var(--risk)" },
+  { key:"budget",  name:"Budget Sponsor",       role:"cost · ROI",         emoji:"💰", ini:"BS", col:"var(--budget)" },
+  { key:"enduser", name:"Operational End-User", role:"workload · trust",   emoji:"🎧", ini:"EU", col:"var(--enduser)" },
+  { key:"itdata",  name:"IT / Data Owner",      role:"data · integration", emoji:"🖥️", ini:"IT", col:"var(--itdata)" },
+  { key:"risk",    name:"Risk & Compliance",    role:"regulatory · rep",   emoji:"⚖️", ini:"RC", col:"var(--risk)" },
 ];
 const BY = Object.fromEntries(SPECS.map(s => [s.key, s]));
 const POSTURE = { adopt:"On board", block:"Will resist", circumvent:"Yes, but…", escalate:"Wants sign-off" };
-const SEVERITY = { block:4, escalate:3, circumvent:2, adopt:1 };  // worst posture wins the chip
+const SEVERITY = { block:4, escalate:3, circumvent:2, adopt:1 };
 
-// ---- fold the (revealed slice of) events into render state ----
 function fold(events) {
-  const s = { initiative:null, sector:null, orgSize:null, nodes:{}, order:[],
-    called:{}, stances:{}, finished:false };
+  const s = { initiative:null, sector:null, orgSize:null, nodes:{}, order:[], called:{}, stances:{}, finished:false };
   for (const e of events) {
     if (e.type === "run_started") { s.initiative=e.initiative; s.sector=e.sector; s.orgSize=e.org_size; }
     else if (e.type === "node_created") {
@@ -193,58 +205,61 @@ function fold(events) {
 function status(n){ if(n.pruned) return "preempted";
   const v=Object.values(n.stances); if(v.some(x=>x.stance==="block")) return "blocked";
   if(n.assigned.length && n.assigned.every(k=>n.stances[k])) return "propagates"; return "pending"; }
-function posture(stanceList){ if(!stanceList||!stanceList.length) return null;
-  return stanceList.slice().sort((a,b)=>SEVERITY[b]-SEVERITY[a])[0]; }
-
+function posture(list){ if(!list||!list.length) return null; return list.slice().sort((a,b)=>SEVERITY[b]-SEVERITY[a])[0]; }
 function esc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function av(sp){ return `<div class="avatar" style="background:${sp.col}">${sp.ini}</div>`; }
 
 let focusId = null;
-// What is currently in the DOM. We only touch the DOM when one of these strings
-// changes — so a tick with nothing new is a no-op and nothing re-animates/flashes.
-const RENDERED = { pitch:"", live:"", resistance:"", map:"", typing:"", feedN:0, focus:undefined, counts:"" };
-
+const RENDERED = { pitch:"", live:"", topic:"", stage:"", map:"", feedN:0, focus:undefined, counts:"" };
 function scrollFeed(){ if(window._stick!==false){ const f=document.getElementById("feed"); f.scrollTop=f.scrollHeight; } }
 
-// ---- render: idempotent + append-only. Rebuilds a region ONLY when its content changed ----
+// ---- render: idempotent; regions touched only when their content string changes ----
 function render(revealed, full) {
   const s = fold(revealed), sFull = fold(full);
+  const stanceEvents = revealed.filter(e => e.type==="stance_received");
+  const totalStances = full.filter(e => e.type==="stance_received").length;
 
-  // header (guarded — no animation, but skip churn)
+  // header
   const pitch = s.initiative
     ? `Forecasting internal resistance to: <b>${esc(s.initiative)}</b>` +
       (s.sector && s.sector!=="(not specified)" ? ` &nbsp;·&nbsp; ${esc(s.sector)}` : "") +
       (s.orgSize && s.orgSize!=="(not specified)" ? ` &nbsp;·&nbsp; ${esc(s.orgSize)}` : "")
-    : "Before you pitch an AI initiative internally, see <b>who will push back and why</b>.";
+    : "Before you pitch an AI initiative internally, watch <b>who pushes back and why</b>.";
   if (pitch !== RENDERED.pitch) { document.getElementById("pitch").innerHTML = pitch; RENDERED.pitch = pitch; }
 
-  const stanceEvents = revealed.filter(e => e.type==="stance_received");
-  const totalStances = full.filter(e => e.type==="stance_received").length;
   const done = s.finished && revealed.length===full.length;
   const compiling = !done && revealed.length===full.length && stanceEvents.length>0 && stanceEvents.length===totalStances;
   const live = done ? "verdict ready ✓" : (compiling ? "compiling report…" : "negotiation live…");
   if (live !== RENDERED.live) { document.getElementById("liveText").textContent = live; RENDERED.live = live; }
 
-  // resistance strip (rebuild only on change → keeps 'thinking' pulse steady)
-  const rHtml = SPECS.map(sp => {
-    const p = posture(s.stances[sp.key]);
-    const thinking = !p && s.called[sp.key] && s.called[sp.key].size;
-    const cls = p ? p : (thinking ? "thinking" : "idle");
-    const txt = p ? POSTURE[p] : (thinking ? "weighing in…" : "not yet consulted");
-    return `<div class="rcard">${av(sp)}
-      <div><div class="who">${sp.name}</div><div class="role">${sp.role}</div></div>
-      <div class="posture ${cls}">${txt}</div></div>`;
-  }).join("");
-  if (rHtml !== RENDERED.resistance) { document.getElementById("resistance").innerHTML = rHtml; RENDERED.resistance = rHtml; }
+  // ---- the stage (rebuild only when the spoken line or postures change → animates exactly then) ----
+  const speaker = stanceEvents.length ? stanceEvents[stanceEvents.length-1] : null;
+  const rev={}, tot={};
+  revealed.forEach(e=>{ if(e.type==="stance_received") rev[e.specialist]=(rev[e.specialist]||0)+1; });
+  full.forEach(e=>{ if(e.type==="stance_received") tot[e.specialist]=(tot[e.specialist]||0)+1; });
+  const anyTyping = SPECS.some(sp => (s.called[sp.key]&&s.called[sp.key].size) && (tot[sp.key]||0)>(rev[sp.key]||0));
 
-  // feed: APPEND new bubbles only — existing ones are never re-created, so they never re-animate
+  const topicLabel = speaker ? (s.nodes[speaker.node_id]?.label || speaker.node_id) : null;
+  const topic = topicLabel ? `🎙 On the table: <b>${esc(topicLabel)}</b>` : "🎙 The change-impact room";
+  if (topic !== RENDERED.topic) { document.getElementById("topic").innerHTML = topic; RENDERED.topic = topic; }
+
+  const stageKey = JSON.stringify([speaker?.specialist, speaker?.node_id, speaker?.reaction, speaker?.stance,
+    anyTyping, SPECS.map(sp => posture(s.stances[sp.key]) || (s.called[sp.key]?.size ? "…" : "-"))]);
+  if (stageKey !== RENDERED.stage) {
+    document.getElementById("bubblebar").innerHTML = bubbleHtml(s, speaker, anyTyping);
+    document.getElementById("cast").innerHTML = castHtml(s, speaker);
+    RENDERED.stage = stageKey;
+  }
+
+  // ---- transcript: append-only ----
   const msgs = document.getElementById("feedMsgs");
-  if (stanceEvents.length < RENDERED.feedN) { msgs.innerHTML = ""; RENDERED.feedN = 0; }  // fresh run reset
-  for (let i = RENDERED.feedN; i < stanceEvents.length; i++)
-    msgs.insertAdjacentHTML("beforeend", bubbleHtml(stanceEvents[i], s, sFull));
+  if (stanceEvents.length < RENDERED.feedN) { msgs.innerHTML=""; RENDERED.feedN=0; }
+  for (let i=RENDERED.feedN; i<stanceEvents.length; i++) msgs.insertAdjacentHTML("beforeend", msgHtml(stanceEvents[i], s, sFull));
   if (stanceEvents.length !== RENDERED.feedN) { RENDERED.feedN = stanceEvents.length; scrollFeed(); }
+  document.getElementById("feedPlaceholder").style.display = stanceEvents.length ? "none" : "block";
+  const counts = stanceEvents.length ? `${stanceEvents.length} reactions` : "";
+  if (counts !== RENDERED.counts) { document.getElementById("feedCount").textContent = counts; RENDERED.counts = counts; }
 
-  // focus highlight: toggle classes on existing bubbles (no rebuild)
+  // focus highlight (toggle classes, no rebuild)
   if (focusId !== RENDERED.focus) {
     document.querySelectorAll("#feedMsgs .msg").forEach(m => {
       m.classList.toggle("hot", !!focusId && m.dataset.node===focusId);
@@ -254,22 +269,7 @@ function render(revealed, full) {
     if (focusId) { const f=document.querySelector("#feedMsgs .msg.hot"); if(f) f.scrollIntoView({block:"center",behavior:"smooth"}); }
   }
 
-  // typing indicators (rebuild only on change)
-  const rev={}, tot={};
-  revealed.forEach(e=>{ if(e.type==="stance_received") rev[e.specialist]=(rev[e.specialist]||0)+1; });
-  full.forEach(e=>{ if(e.type==="stance_received") tot[e.specialist]=(tot[e.specialist]||0)+1; });
-  const tHtml = SPECS.filter(sp => (s.called[sp.key]&&s.called[sp.key].size) && (tot[sp.key]||0)>(rev[sp.key]||0))
-    .map(sp => `<div class="typing">${av(sp)}
-      <div class="bubble"><b style="color:var(--ink);font-weight:600">${sp.name}</b> is weighing in
-      <span class="d"></span><span class="d"></span><span class="d"></span></div></div>`).join("");
-  if (tHtml !== RENDERED.typing) { document.getElementById("feedTyping").innerHTML = tHtml; RENDERED.typing = tHtml; scrollFeed(); }
-
-  // placeholder + count
-  document.getElementById("feedPlaceholder").style.display = (stanceEvents.length || tHtml) ? "none" : "block";
-  const counts = stanceEvents.length ? `${stanceEvents.length} reactions` : "";
-  if (counts !== RENDERED.counts) { document.getElementById("feedCount").textContent = counts; RENDERED.counts = counts; }
-
-  // map (rebuild only on change → keeps 'pending' pulse steady)
+  // ---- map (rebuild only on change) ----
   const mHtml = mapHtml(s);
   if (mHtml !== RENDERED.map) {
     const map = document.getElementById("map");
@@ -283,20 +283,43 @@ function render(revealed, full) {
   }
 }
 
-function bubbleHtml(e, s, sFull) {
-  const sp = BY[e.specialist];
-  const node = s.nodes[e.node_id] || sFull.nodes[e.node_id] || {};
+function bubbleHtml(s, speaker, anyTyping) {
+  if (speaker) {
+    const sp = BY[speaker.specialist], node = s.nodes[speaker.node_id] || {};
+    const idx = SPECS.findIndex(x => x.key===speaker.specialist);
+    const tail = ((idx + 0.5) / SPECS.length * 100).toFixed(1);
+    return `<div class="speech ${speaker.stance}" style="--tail:${tail}%">
+      <div class="sp-top"><b>${sp.emoji} ${sp.name}</b>
+        <span class="stance ${speaker.stance}">${speaker.stance}</span>
+        <span class="sp-re">re: ${esc(node.label||speaker.node_id)}</span></div>
+      <div class="sp-say">“${esc(speaker.reaction)}”</div></div>`;
+  }
+  return `<div class="hint">${anyTyping ? "The stakeholders are reviewing the initiative…" : "Assembling the room…"}</div>`;
+}
+function castHtml(s, speaker) {
+  return SPECS.map(sp => {
+    const p = posture(s.stances[sp.key]);
+    const thinking = !p && s.called[sp.key] && s.called[sp.key].size;
+    const speaking = speaker && speaker.specialist===sp.key;
+    const chip = p ? `<div class="posture ${p}">${POSTURE[p]}</div>`
+      : thinking ? `<div class="posture thinking">weighing in…</div>`
+      : `<div class="posture idle">—</div>`;
+    return `<div class="char ${speaking?'speaking':''}">
+      <div class="face ${speaking?('spk-'+speaker.stance):''}">${sp.emoji}</div>
+      <div class="cname">${sp.name}</div>${chip}</div>`;
+  }).join("");
+}
+function msgHtml(e, s, sFull) {
+  const sp = BY[e.specialist], node = s.nodes[e.node_id] || sFull.nodes[e.node_id] || {};
   const hot = focusId && e.node_id===focusId, dim = focusId && e.node_id!==focusId;
   return `<div class="msg ${hot?'hot':''} ${dim?'dim':''}" data-node="${e.node_id}">
-      <div class="av">${av(sp)}</div>
+      <div class="face" style="width:34px;height:34px;font-size:17px;border-width:2px">${sp.emoji}</div>
       <div class="bubble">
         <div class="top"><span class="nm">${sp.name}</span>
           <span class="stance ${e.stance}">${e.stance}</span>
           <span class="re">re: <b>${esc(node.label||e.node_id)}</b></span></div>
-        <div class="say">“${esc(e.reaction)}”</div>
-      </div></div>`;
+        <div class="say">“${esc(e.reaction)}”</div></div></div>`;
 }
-
 function mapHtml(s) {
   let html = "";
   if (s.initiative) html += `<div class="rootrow"><div class="stat" style="background:var(--budget)"></div>
@@ -306,60 +329,50 @@ function mapHtml(s) {
     html += rowHtml(d);
     s.order.map(id=>s.nodes[id]).filter(n=>n.parent_id===d.id).forEach(c => html += rowHtml(c));
   }
-  return html || `<div class="placeholder" style="padding:20px 4px">Mapping ripple effects…</div>`;
+  return html || `<div class="placeholder" style="padding:18px 4px">Mapping ripple effects…</div>`;
 }
 function rowHtml(n) {
   const st = status(n);
   const owners = n.assigned.map(k=>`<span class="odot" title="${BY[k]?.name||k}" style="background:${BY[k]?.col||'#888'}"></span>`).join("");
   return `<div class="erow depth${n.depth} ${st} ${focusId===n.id?'sel':''}" data-id="${n.id}">
-    <div class="stat ${st}"></div>
-    <span class="lbl">${esc(n.label)}</span>
-    <span class="tag ${n.polarity}">${n.polarity}</span>
-    <span class="owners">${owners}</span></div>`;
+    <div class="stat ${st}"></div><span class="lbl">${esc(n.label)}</span>
+    <span class="tag ${n.polarity}">${n.polarity}</span><span class="owners">${owners}</span></div>`;
 }
 
-// keep autoscroll only when user is at the bottom
 document.addEventListener("DOMContentLoaded", () => {
   const feed = document.getElementById("feed");
-  feed.addEventListener("scroll", () => {
-    window._stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
-  });
+  feed.addEventListener("scroll", () => { window._stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60; });
 });
 
 // ---- polling + conversational paced reveal ----
 window._revealed = []; window._full = []; window._stick = true;
 let cursor = 0, prevLen = 0;
-
 async function poll() {
   try {
     const res = await fetch(`events.json?t=${Date.now()}`, { cache:"no-store" });
     if (!res.ok) throw new Error(res.status);
     const events = await res.json();
     if (events.length < prevLen) { cursor = 0; RENDERED.feedN = 0; }  // fresh run reset → replay
-    prevLen = events.length;
-    window._full = events;
+    prevLen = events.length; window._full = events;
     document.getElementById("dot").style.background = "var(--adopt)";
   } catch(e) {
     if (RENDERED.live !== "waiting…") { document.getElementById("liveText").textContent = "waiting for events.json…"; RENDERED.live = "waiting…"; }
     document.getElementById("dot").style.background = "var(--circumvent)";
   }
 }
-// Reveal loop: non-conversation events appear at once (map builds, typing starts);
-// each stance_received is revealed one per tick so it reads like people speaking in turn.
+// Reveal one stance per tick so the characters take the floor in turn.
 function tick() {
-  const full = window._full;
-  let spoke = false;
+  const full = window._full; let spoke = false;
   while (cursor < full.length) {
     const t = full[cursor].type;
     if (t === "stance_received") { if (spoke) break; cursor++; spoke = true; break; }
-    cursor++;                                   // reveal instantly, keep consuming
+    cursor++;
   }
   window._revealed = full.slice(0, cursor);
   render(window._revealed, window._full);
 }
-
 poll(); setInterval(poll, 1000);
-setInterval(tick, 550);
+setInterval(tick, 1100);
 </script>
 </body>
 </html>
