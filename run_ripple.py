@@ -136,7 +136,9 @@ def resolve_initiative(arg: str | None) -> str:
 
 
 def build_trigger(initiative: str, sector: str | None, org_size: str | None) -> str:
-    """Fill the trigger template, persist it, and return the filled text."""
+    """Fill the trigger template and return the filled text. The template itself
+    is NEVER overwritten — placeholders must survive for the next run — so the
+    filled copy is persisted to outputs/ for the record instead."""
     template = TRIGGER_TEMPLATE.read_text()
     filled = (
         template
@@ -144,7 +146,8 @@ def build_trigger(initiative: str, sector: str | None, org_size: str | None) -> 
         .replace("{{SECTOR}}", sector or "(not specified)")
         .replace("{{ORG_SIZE}}", org_size or "(not specified)")
     )
-    TRIGGER_TEMPLATE.write_text(filled)  # persist the concrete trigger for the record
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    (OUTPUT_DIR / "initiative-trigger.filled.md").write_text(filled)
     return filled
 
 

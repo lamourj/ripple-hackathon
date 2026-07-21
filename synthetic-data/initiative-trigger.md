@@ -2,7 +2,8 @@
 
 <!--
   Template consumed by run_ripple.py. The runner replaces the {{PLACEHOLDERS}}
-  with the live initiative before uploading this as the trigger context.
+  with the live initiative and writes the FILLED copy to outputs/ — this template
+  stays pristine so every run substitutes cleanly.
   Optional fields left blank should read "(not specified)".
 -->
 

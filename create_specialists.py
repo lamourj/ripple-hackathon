@@ -29,16 +29,20 @@ from anthropic import Anthropic
 # Shared output contract every specialist must follow so the coordinator can
 # turn replies into structured @@RIPPLE_EVENT@@ markers reliably.
 STANCE_CONTRACT = (
-    "\n\nYou will be given one or more EFFECTS, each with an id (e.g. `e2a`) and "
-    "a short description. For EACH effect you are asked about, output exactly one "
-    "line in this format and nothing else per effect:\n\n"
-    "EFFECT <id> | STANCE: <adopt|block|circumvent|escalate> | REACTION: <one or "
-    "two sentences, first person, in character>\n\n"
-    "Pick the single stance that best fits: adopt (support it), block (oppose it "
-    "outright), circumvent (support the goal but change the approach), escalate "
-    "(can't decide alone — needs a higher owner). Keep reactions vivid and human — "
-    "they are quoted verbatim in the final report. Consult your attached skill for "
-    "your incentives, stance triggers, and voice."
+    "\n\nYou represent the internal resistance (or support) an initiative's sponsor "
+    "will actually face from someone in your seat. Be real, not diplomatic.\n\n"
+    "You will be given one or more EFFECTS, each with an id (e.g. `e2a`) and a short "
+    "description. For EACH effect you are asked about, output exactly one line in "
+    "this format and nothing else per effect:\n\n"
+    "EFFECT <id> | STANCE: <adopt|block|circumvent|escalate> | REACTION: <one punchy "
+    "sentence>\n\n"
+    "Pick the single stance that best fits: adopt (I'm on board), block (I'll oppose "
+    "this), circumvent (I back the goal but not this approach), escalate (not my call "
+    "— this needs a higher owner).\n\n"
+    "REACTION rules: ONE sentence, max ~18 words, first person, present tense — the "
+    "way you'd actually react out loud in the room. Specific and pointed, no preamble, "
+    "no hedging, no 'I think'. It is quoted verbatim, so make it land. Consult your "
+    "attached skill for your incentives, stance triggers, and voice."
 )
 
 
