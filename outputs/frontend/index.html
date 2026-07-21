@@ -2,11 +2,16 @@
 <!--
   Ripple — Change Impact Desk · live frontend ("situation room")
   ================================================================
-  Serve this directory (it also holds the live events.json) with:
+  Best experience — serve WITH the control server so you can launch runs
+  from the page (type an initiative, hit Run) and watch them stream live:
+
+      python serve.py            # http://localhost:8000
+
+  Replay-only (no launching from the UI) also works with a plain static server:
 
       python -m http.server 8000 --directory outputs/frontend
 
-  Then open http://localhost:8000 . The page polls events.json once a second
+  The page polls events.json once a second
   and plays the stakeholder negotiation as a little simulation: four characters
   take the floor one at a time, react in their own voice, and the ripple map +
   transcript fill in beneath. Feels live whether the swarm is still running or
@@ -37,6 +42,17 @@
   .live .dot { width:8px;height:8px;border-radius:50%;background:var(--adopt);animation:pulse 1.4s infinite; }
   .pitch { color:var(--dim); font-size:13px; margin-top:4px; max-width:960px; }
   .pitch b { color:var(--ink); font-weight:600; }
+
+  .runbar { display:flex; gap:8px; margin-top:10px; align-items:center; flex-wrap:wrap; }
+  .runbar input { background:var(--panel2); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:7px 11px; font-size:13px; outline:none; }
+  .runbar input:focus { border-color:var(--budget); }
+  .runbar input#fInit { flex:1 1 380px; min-width:260px; }
+  .runbar input#fSector { flex:0 1 180px; } .runbar input#fOrg { flex:0 1 180px; }
+  .runbar button { background:var(--budget); color:#08111d; border:none; border-radius:8px;
+    padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .runbar button:disabled { background:var(--faint); color:var(--panel); cursor:default; }
+  .runmsg { font-size:12px; color:var(--dim); }
 
   .layout { height:calc(100vh - 58px); display:flex; flex-direction:column; }
 
@@ -143,6 +159,13 @@
       Before you pitch an AI initiative internally, watch <b>who pushes back and why</b> —
       the four stakeholders you'll have to win over, in the room.
     </div>
+    <form class="runbar" id="runForm" autocomplete="off">
+      <input id="fInit" placeholder="An AI initiative to pressure-test…" />
+      <input id="fSector" placeholder="Sector (optional)" />
+      <input id="fOrg" placeholder="Org size (optional)" />
+      <button id="runBtn" type="submit">▶ Run</button>
+      <span class="runmsg" id="runMsg"></span>
+    </form>
   </header>
 
   <div class="layout">
@@ -342,6 +365,40 @@ function rowHtml(n) {
 document.addEventListener("DOMContentLoaded", () => {
   const feed = document.getElementById("feed");
   feed.addEventListener("scroll", () => { window._stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60; });
+});
+
+// ---- launch a run from the UI (needs serve.py; degrades gracefully otherwise) ----
+function setRunning(on, msg) {
+  const btn = document.getElementById("runBtn");
+  btn.disabled = on;
+  btn.textContent = on ? "● Running…" : "▶ Run";
+  document.getElementById("runMsg").textContent = msg || "";
+}
+function watchStatus() {
+  const iv = setInterval(async () => {
+    try {
+      const s = await (await fetch(`/status?t=${Date.now()}`, { cache:"no-store" })).json();
+      if (!s.running) { clearInterval(iv); setRunning(false, s.error ? ("error: " + s.error) : "report ready ✓"); }
+    } catch(_) { /* keep waiting */ }
+  }, 1500);
+}
+document.getElementById("runForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const initiative = document.getElementById("fInit").value.trim();
+  if (!initiative) { setRunning(false, "type an initiative first"); return; }
+  const sector = document.getElementById("fSector").value.trim() || null;
+  const org_size = document.getElementById("fOrg").value.trim() || null;
+  setRunning(true, "launching the swarm…");
+  try {
+    const r = await fetch("/run", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ initiative, sector, org_size }) });
+    if (r.status === 409) { setRunning(false, "a run is already in progress"); return; }
+    if (!r.ok) { const e = await r.json().catch(()=>({})); setRunning(false, e.error || "run this page via: python serve.py"); return; }
+    cursor = 0; prevLen = 0; RENDERED.feedN = 0;   // replay the fresh run from the top
+    watchStatus();
+  } catch(_) {
+    setRunning(false, "no control server — start it with: python serve.py");
+  }
 });
 
 // ---- polling + conversational paced reveal ----

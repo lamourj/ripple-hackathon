@@ -151,19 +151,27 @@ def build_trigger(initiative: str, sector: str | None, org_size: str | None) -> 
     return filled
 
 
-def main() -> None:
-    args = parse_args()
-
+def preconditions_ok() -> str | None:
+    """Return an error message if the swarm can't run yet, else None."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("Set ANTHROPIC_API_KEY before running.")
+        return "Set ANTHROPIC_API_KEY before running."
     if not Path(".coordinator_id").exists() or not Path(".environment_id").exists():
-        raise SystemExit(
-            "Missing .coordinator_id or .environment_id. Run create_specialists.py, "
-            "upload_skills.py, then create_coordinator.py first."
-        )
+        return ("Missing .coordinator_id or .environment_id. Run create_specialists.py, "
+                "upload_skills.py, then create_coordinator.py first.")
+    return None
 
-    initiative = resolve_initiative(args.initiative)
-    sector, org_size, frontend_url = args.sector, args.org_size, args.frontend_url
+
+def run_swarm(initiative: str, sector: str | None, org_size: str | None,
+              frontend_url: str = DEFAULT_FRONTEND_URL, log=print) -> dict:
+    """Run one Ripple swarm end-to-end: fill the trigger, stream the session,
+    harvest @@RIPPLE_EVENT@@ markers into outputs/frontend/events.json (live,
+    flushed per event), and save the report to outputs/ripple-risk-report.docx.
+
+    Importable so the UI server (serve.py) can launch a run in a background
+    thread. Raises RuntimeError if prerequisites are missing."""
+    err = preconditions_ok()
+    if err:
+        raise RuntimeError(err)
 
     coordinator_id = Path(".coordinator_id").read_text().strip()
     environment_id = Path(".environment_id").read_text().strip()
@@ -181,10 +189,9 @@ def main() -> None:
         "sector": sector,
         "org_size": org_size,
     })
-    print(f"\nLive events -> {EVENTS_PATH}")
-    print(f"Serve the frontend with:\n  python -m http.server 8000 --directory {FRONTEND_DIR}\n")
+    log(f"\nLive events -> {EVENTS_PATH}")
 
-    print(f"Starting session against coordinator {coordinator_id}...")
+    log(f"Starting session against coordinator {coordinator_id}...")
     session = client.beta.sessions.create(
         agent=coordinator_id,
         environment_id=environment_id,
@@ -205,7 +212,7 @@ def main() -> None:
 
     parser = MarkerParser()
 
-    print("\n=== EVENT STREAM (this is the demo) ===\n")
+    log("\n=== EVENT STREAM (this is the demo) ===\n")
     final_text_parts: list[str] = []
 
     with client.beta.sessions.events.stream(session.id) as stream:
@@ -217,35 +224,31 @@ def main() -> None:
         for event in stream:
             t = event.type
             if t == "session.thread_created":
-                print(f"  [thread spawned]   {event.agent_name}", flush=True)
+                log(f"  [thread spawned]   {event.agent_name}")
             elif t == "session.thread_status_running":
                 name = getattr(event, "agent_name", "?")
-                print(f"  [thread running]   {name}", flush=True)
+                log(f"  [thread running]   {name}")
             elif t == "agent.thread_message_received":
-                print(f"  [reply <-]         {event.from_agent_name}", flush=True)
+                log(f"  [reply <-]         {event.from_agent_name}")
             elif t == "agent.thread_message_sent":
-                print(f"  [delegate ->]      {event.to_agent_name}", flush=True)
+                log(f"  [delegate ->]      {event.to_agent_name}")
             elif t == "agent.message":
                 for block in event.content:
                     if getattr(block, "type", None) == "text":
                         final_text_parts.append(block.text)
-                        # Harvest any complete markers, then show the prose.
+                        # Harvest any complete markers as they stream in.
                         for rec in parser.feed(block.text):
                             saved = events.append(rec)
-                            print(f"\n  [event #{saved['seq']:02d}] "
-                                  f"{saved['type']}", flush=True)
-                        print(block.text, end="", flush=True)
-            elif t == "agent.tool_use":
-                print(f"\n  [tool: {getattr(event, 'name', '?')}]", flush=True)
+                            log(f"  [event #{saved['seq']:02d}] {saved['type']}")
             elif t == "session.status_idle":
-                print("\n\n[swarm finished]")
+                log("\n[swarm finished]")
                 break
 
     # Save the coordinator transcript.
     (OUTPUT_DIR / "coordinator-transcript.txt").write_text("".join(final_text_parts))
 
     # Download deliverables; save the docx as the canonical report name.
-    print("\nDownloading deliverables from the session container...")
+    log("\nDownloading deliverables from the session container...")
     files = client.beta.files.list(scope_id=session.id, betas=["managed-agents-2026-04-01"])
     docx_saved = False
     for f in files.data:
@@ -254,11 +257,11 @@ def main() -> None:
             docx_saved = True
         else:
             out_path = OUTPUT_DIR / f.filename
-        print(f"  {f.filename}  ->  {out_path}")
+        log(f"  {f.filename}  ->  {out_path}")
         client.beta.files.download(f.id).write_to_file(str(out_path))
 
     if not docx_saved:
-        print("  WARNING: no .docx produced — the coordinator may have output text only.")
+        log("  WARNING: no .docx produced — the coordinator may have output text only.")
 
     events.append({
         "type": "run_finished",
@@ -266,10 +269,20 @@ def main() -> None:
         "frontend_url": frontend_url,
     })
 
-    print(f"\nRipple Risk Report -> {OUTPUT_DIR / 'ripple-risk-report.docx'}")
-    print(f"Live event stream   -> {EVENTS_PATH}  ({len(events.events)} events)")
-    print(f"\nView the full session (all sub-agent threads) at:")
-    print(f"  https://platform.claude.com/sessions/{session.id}")
+    log(f"\nRipple Risk Report -> {OUTPUT_DIR / 'ripple-risk-report.docx'}")
+    log(f"Live event stream   -> {EVENTS_PATH}  ({len(events.events)} events)")
+    log(f"View the full session at: https://platform.claude.com/sessions/{session.id}")
+    return {"session_id": session.id, "docx": docx_saved, "events": len(events.events)}
+
+
+def main() -> None:
+    args = parse_args()
+    err = preconditions_ok()
+    if err:
+        raise SystemExit(err)
+    initiative = resolve_initiative(args.initiative)
+    print(f"Serve the live frontend with:\n  python serve.py   (then open {args.frontend_url})\n")
+    run_swarm(initiative, args.sector, args.org_size, args.frontend_url)
 
 
 if __name__ == "__main__":
